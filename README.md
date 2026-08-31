@@ -2,6 +2,7 @@
 
 Notify me when DSH needs me: desktop notification (with tab-title fallback) when an
 approval prompt or an ask-user-question card appears while the page is in the background.
+![Uploading image.png…]()
 
 ## Install
 
