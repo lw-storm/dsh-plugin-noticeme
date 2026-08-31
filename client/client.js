@@ -3,14 +3,22 @@
 // notification (or a tab-title fallback) only while the page is hidden.
 // Long-polling is used because browsers throttle background-tab timers but
 // never throttle a pending fetch.
+//
+// Deferred-notification semantics: items arriving while the page is visible
+// are cached instead of dropped; the moment the tab goes hidden they are
+// raised, so "approval appeared while I was looking, then I switched away"
+// still notifies. Coming back to the page clears the cache (the user can see
+// the pending card) — no repeated notifications.
 window.__ModuleLoader__.load({ id: 'dsh-plugin-noticeme', factory: function (require) {
   var module = { exports: {} }
   var exports = module.exports
 
   var TITLE_PREFIX = '⚠ 需要你确认 · '
   var NOTIFY_TAG = 'dsh-noticeme'
+  var CACHE_MAX = 5
   var savedTitle = null
   var stopped = false
+  var pendingNotify = []
 
   function requestPermission() {
     try {
@@ -67,14 +75,22 @@ window.__ModuleLoader__.load({ id: 'dsh-plugin-noticeme', factory: function (req
     setTitleFlag()
   }
 
+  function firePending() {
+    if (!pendingNotify.length) return
+    if (document.visibilityState === 'visible') return
+    var items = pendingNotify
+    pendingNotify = []
+    items.forEach(notify)
+  }
+
   function drain() {
     if (stopped) return
     fetch('/dsh-noticeme/wait', { cache: 'no-store' })
       .then(function (r) { return r.json() })
       .then(function (data) {
-        // The user is looking at the page: no notification needed.
-        if (data && data.ok && data.items && data.items.length && document.visibilityState !== 'visible') {
-          data.items.forEach(notify)
+        if (data && data.ok && data.items && data.items.length) {
+          pendingNotify = pendingNotify.concat(data.items).slice(-CACHE_MAX)
+          firePending()
         }
         drain()
       })
@@ -90,13 +106,19 @@ window.__ModuleLoader__.load({ id: 'dsh-plugin-noticeme', factory: function (req
       stopped = false
       drain()
       var onVis = function () {
-        if (document.visibilityState === 'visible') clearTitleFlag()
+        if (document.visibilityState === 'visible') {
+          clearTitleFlag()
+          pendingNotify = [] // user is back and can see the pending card
+        } else {
+          firePending() // just left the tab: raise cached notifications
+        }
       }
       document.addEventListener('visibilitychange', onVis)
       return function () {
         stopped = true
         document.removeEventListener('visibilitychange', onVis)
         clearTitleFlag()
+        pendingNotify = []
       }
     }, 'dsh-plugin-noticeme: long-poll')
   }
