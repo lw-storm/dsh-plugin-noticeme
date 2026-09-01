@@ -80,7 +80,30 @@ window.__ModuleLoader__.load({ id: 'dsh-plugin-noticeme', factory: function (req
     if (document.visibilityState === 'visible') return
     var items = pendingNotify
     pendingNotify = []
-    items.forEach(notify)
+    // Ask the host which of these were already handled (approved/answered)
+    // while the page was visible — do not re-notify those.
+    var ids = []
+    items.forEach(function (it) {
+      if (it && it.callId) ids.push(it.callId)
+    })
+    if (!ids.length) {
+      items.forEach(notify)
+      return
+    }
+    fetch('/dsh-noticeme/resolved?ids=' + encodeURIComponent(ids.join(',')), { cache: 'no-store' })
+      .then(function (r) { return r.json() })
+      .then(function (data) {
+        var settled = (data && data.resolved) || []
+        items.forEach(function (it) {
+          if (!it.callId || settled.indexOf(it.callId) === -1) {
+            // still pending for the user: notify (unless the tab became visible again meanwhile)
+            if (document.visibilityState !== 'visible') notify(it)
+          }
+        })
+      })
+      .catch(function () {
+        items.forEach(notify) // host unreachable: notify anyway
+      })
   }
 
   function drain() {
