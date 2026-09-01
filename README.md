@@ -1,7 +1,7 @@
 # dsh-plugin-noticeme
 
 Notify me when DSH needs me: desktop notification (with tab-title fallback) when an
-approval prompt or an ask-user-question card appears while the page is in the background.
+approval prompt or an ask-user-question card appears while the page is in the background.   
 
 <img width="566" height="285" alt="image" src="https://github.com/user-attachments/assets/60c1bfe1-399d-47bc-8be8-6db6a3f31f35" />
 
