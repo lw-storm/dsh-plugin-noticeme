@@ -90,15 +90,31 @@ window.__ModuleLoader__.load({ id: 'dsh-plugin-noticeme', factory: function (req
       items.forEach(notify)
       return
     }
+    fireChecked(items, ids, 0)
+  }
+
+  // Query settlement; if everything still looks unsettled on the first pass,
+  // wait briefly and re-check once — the host marks "approved" asynchronously
+  // after the user clicks (audit/log latency), and switching away immediately
+  // can otherwise race ahead of that mark.
+  function fireChecked(items, ids, attempt) {
+    if (document.visibilityState === 'visible') return
     fetch('/dsh-noticeme/resolved?ids=' + encodeURIComponent(ids.join(',')), { cache: 'no-store' })
       .then(function (r) { return r.json() })
       .then(function (data) {
         var settled = (data && data.resolved) || []
-        items.forEach(function (it) {
-          if (!it.callId || settled.indexOf(it.callId) === -1) {
-            // still pending for the user: notify (unless the tab became visible again meanwhile)
-            if (document.visibilityState !== 'visible') notify(it)
-          }
+        var pendingItems = items.filter(function (it) {
+          return !it.callId || settled.indexOf(it.callId) === -1
+        })
+        if (pendingItems.length && attempt === 0) {
+          // Everything may still be unmarked because the approval just landed.
+          // Give the host a moment, then re-check once before notifying.
+          setTimeout(function () { fireChecked(pendingItems, ids, 1) }, 800)
+          return
+        }
+        pendingItems.forEach(function (it) {
+          // still pending for the user: notify (unless the tab became visible again meanwhile)
+          if (document.visibilityState !== 'visible') notify(it)
         })
       })
       .catch(function () {
